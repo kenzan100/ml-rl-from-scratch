@@ -1,20 +1,25 @@
 TicTacToeLabel = :tic_tac_toe
 
 class Ai
-  attr_reader :world, :playable_worlds, :step_size, :my_side
+  attr_reader :world, :step_size, :my_side
   attr_accessor :values
+
+  def self.read(path:)
+    body = {}
+    File.open(path, 'rb') do |file| 
+      body = Marshal.load file
+    end
+    body
+  end
 
   def initialize(world:, learned_values_path: nil)
     @playable_worlds = [TicTacToeLabel]
     @world = world
     @step_size = 0.1
     @my_side = 'o'
-    check_playability!
 
     if learned_values_path
-      File.open(learned_values_path, 'rb') do |file| 
-        self.values = Marshal.load file
-      end
+      self.values = self.class.read(path: learned_values_path)
     else
       self.values = {}
     end
@@ -32,9 +37,12 @@ class Ai
       old_value = next_value
 
       your_move = determine_move(state: old_state)
-      world.step(move: your_move)
+      world_state = world.clone_state(world.step(move: your_move))
 
-      break if world.ended?
+      if world.ended?
+        re_evaluate_values(state: world_state, old_value: old_value, old_state: old_state)
+        break
+      end
 
       puts "Waiting your your input"
       puts world.to_s
@@ -44,9 +52,7 @@ class Ai
       world_state = world.clone_state(world.step(move: human_move))
 
       # Re-Evaluate the values
-      next_value = values[world_state] || init_value(state: world_state)
-      new_value = old_value + (step_size * ( next_value - old_value ))
-      values[old_state] = new_value
+      re_evaluate_values(state: world_state, old_value: old_value, old_state: old_state)
 
       pp values
 
@@ -62,8 +68,10 @@ class Ai
 
   private
 
-  def check_playability!
-    raise "I don't know" unless playable_worlds.include?(world.label)
+  def re_evaluate_values(state:, old_value:, old_state:)
+    next_value = values[state] || init_value(state: state)
+    new_value = old_value + (step_size * ( next_value - old_value ))
+    values[old_state] = new_value
   end
 
   def init_value(state:)
@@ -94,7 +102,6 @@ class Ai
       state = move_and_state[:state]
       values[state] || init_value(state: state)
     end
-    pp next_move_state_greedy
 
     next_move_state_greedy[:move]
   end
