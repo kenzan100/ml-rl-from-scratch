@@ -1,14 +1,10 @@
 require 'byebug'
 require 'pp'
-require 'json'
 
 TicTacToeLabel = :tic_tac_toe
 
 class TicTacToeState
   def init
-    [['-', '-', '-'],
-     ['-', '-', '-'],
-     ['-', '-', '-']]
   end
 end
 
@@ -23,7 +19,9 @@ class TicTacToe
   end
 
   def reset
-    @state = TicTacToeState.new.init
+    @state = [['-', '-', '-'],
+              ['-', '-', '-'],
+              ['-', '-', '-']]
     state
   end
 
@@ -109,8 +107,9 @@ class Ai
     check_playability!
 
     if learned_values_path
-      byebug
-      self.values = File.open(learned_values_path)
+      File.open(learned_values_path, 'rb') do |file| 
+        self.values = Marshal.load file
+      end
     else
       self.values = {}
     end
@@ -138,8 +137,8 @@ class Ai
 
     end while !world.ended?
 
-    File.open("Ai_value_#{Time.now.to_i}.json", 'a+') do |file|
-      file.puts values.to_json
+    File.open("Ai_value_#{Time.now.to_i}.dump", 'wb') do |file|
+      file.print Marshal.dump(values)
     end
 
     puts "RESULT"
