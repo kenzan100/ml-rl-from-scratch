@@ -9,9 +9,10 @@ class TicTacToeState
 end
 
 class TicTacToe
-  attr_reader :state, :cur_turn_symbol
+  attr_reader :state, :cur_turn_symbol, :turn_num
   def initialize
-    @cur_turn_symbol = 'o'
+    @cur_turn_symbol = 'x'
+    @turn_num = 1
   end
 
   def label
@@ -23,6 +24,12 @@ class TicTacToe
               ['-', '-', '-'],
               ['-', '-', '-']]
     state
+  end
+
+  def parse_human_move(move_id:, symbol:)
+    row = move_id[0].to_i
+    col = move_id[1].to_i
+    TicTacToeMove.new(row: row, column: col, playing_symbol: symbol)
   end
 
   def opposite_side(side:)
@@ -37,11 +44,12 @@ class TicTacToe
   def step(move:)
     cur_symbol = @state[move.row][move.column]
     if cur_symbol != '-'
+      byebug
       raise "Already occupied"
     end
     @state[move.row][move.column] = move.playing_symbol
     @cur_turn_symbol = cur_turn_symbol == 'o' ? 'x' : 'o'
-    puts "Turn passed"
+    @turn_num += 1 if cur_turn_symbol == 'o'
     state
   end
 
@@ -56,7 +64,8 @@ class TicTacToe
   end
 
   def ended?
-    same_mark_checker = -> (arr) { arr.all? { |mark| %w(o x).include?(mark) }  }
+    same_mark_checker = -> (arr) { arr.all? { |mark| mark == 'o' } ||
+                                   arr.all? { |mark| mark == 'x' } }
     check_end_condition(checker: same_mark_checker)
   end
 
@@ -78,7 +87,11 @@ class TicTacToe
     state.each_with_index do |row, i|
       row.each_with_index do |cell, j|
         if cell == '-'
-          move_and_state = { move: TicTacToeMove.new(row: i, column: j, playing_symbol: cur_turn_symbol) }
+          move_and_state = {
+            move: TicTacToeMove.new(row: i,
+                                    column: j,
+                                    playing_symbol: opposite_side(side: cur_turn_symbol))
+          }
           move_and_state.merge!({ state: virtual_step(move: move_and_state[:move]) })
           possible_moves_and_states << move_and_state
         end
@@ -103,7 +116,7 @@ class Ai
     @playable_worlds = [TicTacToeLabel]
     @world = world
     @step_size = 0.1
-    @my_side = 'x'
+    @my_side = 'o'
     check_playability!
 
     if learned_values_path
@@ -121,17 +134,26 @@ class Ai
     next_value = init_value(state: world_state)
 
     begin
+      puts "Turn #{world.turn_num}"
+
       old_state = world.clone_state(world_state)
       old_value = next_value
 
       your_move = determine_move(state: old_state)
+      world.step(move: your_move)
 
-      world_state = world.clone_state(world.step(move: your_move))
+      break if world.ended?
 
+      puts "Waiting your your input"
+      puts world.to_s
+      human_move_id = STDIN.gets
+      human_move = world.parse_human_move(move_id: human_move_id,
+                                          symbol: world.opposite_side(side: my_side))
+      world_state = world.clone_state(world.step(move: human_move))
+
+      # Re-Evaluate the values
       next_value = values[world_state] || init_value(state: world_state)
-
       new_value = old_value + (step_size * ( next_value - old_value ))
-
       values[old_state] = new_value
 
       pp values
