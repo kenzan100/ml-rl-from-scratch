@@ -79,7 +79,7 @@ class TicTacToe
       row.each_with_index do |cell, j|
         if cell == '-'
           move_and_state = { move: TicTacToeMove.new(row: i, column: j, playing_symbol: cur_turn_symbol) }
-          move_and_state.merge({ state: virtual_step(move: move_and_state[:move]) })
+          move_and_state.merge!({ state: virtual_step(move: move_and_state[:move]) })
           possible_moves_and_states << move_and_state
         end
       end
@@ -113,6 +113,7 @@ class Ai
     else
       self.values = {}
     end
+    @values.delete_if { |k, _v| k.nil? }
   end
 
   def start
@@ -137,7 +138,7 @@ class Ai
 
     end while !world.ended?
 
-    File.open("Ai_value_#{Time.now.to_i}.dump", 'wb') do |file|
+    File.open("Ai_values.dump", 'wb') do |file|
       file.print Marshal.dump(values)
     end
 
@@ -173,7 +174,14 @@ class Ai
   end
 
   def determine_move(state:)
-    next_move_state_greedy = world.next_possible_moves_states.max_by { |move_and_state| values[move_and_state[:state]] }
+    pp world.next_possible_moves_states.map { |ms| values[ms[:state]] }
+
+    next_move_state_greedy = world.next_possible_moves_states.max_by do |move_and_state|
+      state = move_and_state[:state]
+      values[state] || init_value(state: state)
+    end
+    pp next_move_state_greedy
+
     next_move_state_greedy[:move]
   end
 end
