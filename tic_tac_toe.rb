@@ -61,16 +61,17 @@ class TicTacToe
     check_end_condition(checker: same_mark_checker)
   end
 
-  def won?(side:)
+  def won?(side:, tmp_state: nil)
     one_side_mark_checker = -> (arr) { arr.all? { |mark| mark == side } }
-    check_end_condition(checker: one_side_mark_checker)
+    check_end_condition(checker: one_side_mark_checker, tmp_state: tmp_state)
   end
 
-  def check_end_condition(checker:) 
+  def check_end_condition(checker:, tmp_state: nil)
+    state = tmp_state.nil? ? @state : tmp_state
     ended = [state.any? { |row| checker.call(row) },
              state.transpose.any? { |column| checker.call(column) },
-             [0, 1, 2].map { |n| state[n] }.any? { |diagonal| checker.call(diagonal) },
-             [2, 1, 0].map { |n| state[n] }.any? { |diagonal| checker.call(diagonal) }].any?
+             checker.call([0, 1, 2].map.with_index { |n,i| state[i][n] }),
+             checker.call([2, 1, 0].map.with_index { |n,i| state[i][n] })].any?
     ended
   end
 

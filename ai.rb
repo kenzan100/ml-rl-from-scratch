@@ -44,6 +44,8 @@ class Ai
         break
       end
 
+      old_state = world.clone_state(world_state)
+
       puts "Waiting your your input"
       puts world.to_s
       human_move_id = STDIN.gets
@@ -88,11 +90,11 @@ class Ai
   end
 
   def win?(state:)
-    world.won?(side: my_side)
+    world.won?(side: my_side, tmp_state: state)
   end
 
   def lose?(state:)
-    world.won?(side: world.opposite_side(side: my_side))
+    world.won?(side: world.opposite_side(side: my_side), tmp_state: state)
   end
 
   def determine_move(state:)
