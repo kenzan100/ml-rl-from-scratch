@@ -1,10 +1,21 @@
 require 'byebug'
+require 'pp'
+require 'json'
 
 TicTacToeLabel = :tic_tac_toe
 
+class TicTacToeState
+  def init
+    [['-', '-', '-'],
+     ['-', '-', '-'],
+     ['-', '-', '-']]
+  end
+end
+
 class TicTacToe
-  attr_reader :state
+  attr_reader :state, :cur_turn_symbol
   def initialize
+    @cur_turn_symbol = 'o'
   end
 
   def label
@@ -12,10 +23,12 @@ class TicTacToe
   end
 
   def reset
-    @state = [['-', '-', '-'],
-              ['-', '-', '-'],
-              ['-', '-', '-']]
+    @state = TicTacToeState.new.init
     state
+  end
+
+  def opposite_side(side:)
+    side == 'o' ? 'x' : 'o'
   end
 
   def to_s
@@ -24,24 +37,42 @@ class TicTacToe
   end
 
   def step(move:)
-    cur_symbol = @state[move.row][move.column] = move.playing_symbol
-    raise "Already occupied" unless cur_symbol == '-'
+    cur_symbol = @state[move.row][move.column]
+    if cur_symbol != '-'
+      raise "Already occupied"
+    end
     @state[move.row][move.column] = move.playing_symbol
+    @cur_turn_symbol = cur_turn_symbol == 'o' ? 'x' : 'o'
+    puts "Turn passed"
     state
   end
 
   def virtual_step(move:)
-    tmp_state = state.clone
+    tmp_state = clone_state(state)
     tmp_state[move.row][move.column] = move.playing_symbol
     tmp_state
   end
 
+  def clone_state(state)
+    state.map { |row| row.clone }
+  end
+
   def ended?
     same_mark_checker = -> (arr) { arr.all? { |mark| %w(o x).include?(mark) }  }
-    [state.any? { |row| same_mark_checker.call(row) },
-     state.change_axis.any? { |column| same_mark_checker.call(column) },
-     [0, 1, 2].map { |n| state[n] }.any? { |diagonal| same_mark_checker.call(diagonal) },
-     [2, 1, 0].map { |n| state[n] }.any? { |diagonal| same_mark_checker.call(diagonal) }].any?
+    check_end_condition(checker: same_mark_checker)
+  end
+
+  def won?(side:)
+    one_side_mark_checker = -> (arr) { arr.all? { |mark| mark == side } }
+    check_end_condition(checker: one_side_mark_checker)
+  end
+
+  def check_end_condition(checker:) 
+    ended = [state.any? { |row| checker.call(row) },
+             state.transpose.any? { |column| checker.call(column) },
+             [0, 1, 2].map { |n| state[n] }.any? { |diagonal| checker.call(diagonal) },
+             [2, 1, 0].map { |n| state[n] }.any? { |diagonal| checker.call(diagonal) }].any?
+    ended
   end
 
   def next_possible_moves_states
@@ -50,12 +81,12 @@ class TicTacToe
       row.each_with_index do |cell, j|
         if cell == '-'
           move_and_state = { move: TicTacToeMove.new(row: i, column: j, playing_symbol: cur_turn_symbol) }
-          move_and_state.merge { state: virtual_step(move_and_state[:move]) }
+          move_and_state.merge({ state: virtual_step(move: move_and_state[:move]) })
           possible_moves_and_states << move_and_state
         end
       end
     end
-    possible_moves_and_steps
+    possible_moves_and_states
   end
 end
 
@@ -66,41 +97,53 @@ class TicTacToeMove
   end
 end
 
-world = TicTacToe.new
-world.reset
-puts world.to_s
-
 class Ai
-  attr_reader :world, :playable_worlds
+  attr_reader :world, :playable_worlds, :step_size, :my_side
   attr_accessor :values
 
-  def initialize(world:)
+  def initialize(world:, learned_values_path: nil)
     @playable_worlds = [TicTacToeLabel]
     @world = world
+    @step_size = 0.1
+    @my_side = 'x'
     check_playability!
+
+    if learned_values_path
+      byebug
+      self.values = File.open(learned_values_path)
+    else
+      self.values = {}
+    end
   end
 
   def start
-    values = {}
-
-    world_state = world.reset
+    world_state = world.clone_state(world.reset)
     next_value = init_value(state: world_state)
 
     begin
-      old_state = world_state
+      old_state = world.clone_state(world_state)
       old_value = next_value
 
       your_move = determine_move(state: old_state)
 
-      world_state = world.step(move: your_move)
+      world_state = world.clone_state(world.step(move: your_move))
 
-      next_value = values[world_state] || init_value(world_state)
+      next_value = values[world_state] || init_value(state: world_state)
 
-      new_value = old_value + step_size( next_value - old_value )
+      new_value = old_value + (step_size * ( next_value - old_value ))
 
       values[old_state] = new_value
 
-    end while world.ended?
+      pp values
+
+    end while !world.ended?
+
+    File.open("Ai_value_#{Time.now.to_i}.json", 'a+') do |file|
+      file.puts values.to_json
+    end
+
+    puts "RESULT"
+    puts world.to_s
   end
 
   private
@@ -110,16 +153,24 @@ class Ai
   end
 
   def init_value(state:)
-    values[state] = 1 and return if win?(world: world, state: state)
-    values[state] = 0 and return if lose?(world: world, state: state)
-    values[state] = 0 and return if world.ended?
-    values[state] = 0.5
+    value = case
+            when win?(state: state)
+              1
+            when lose?(state: state) || world.ended?
+              0
+            else
+              0.5
+            end
+    values[state] = value
+    value
   end
 
   def win?(state:)
+    world.won?(side: my_side)
   end
 
   def lose?(state:)
+    world.won?(side: world.opposite_side(side: my_side))
   end
 
   def determine_move(state:)
@@ -127,3 +178,7 @@ class Ai
     next_move_state_greedy[:move]
   end
 end
+
+world = TicTacToe.new
+ai = Ai.new(world: world, learned_values_path: ARGV[0])
+ai.start
